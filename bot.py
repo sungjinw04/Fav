@@ -11,7 +11,7 @@ app = Client(
 )
 
 # Connect to SQLite database
-conn = sqlite3.connect("bot_database.db")
+conn = sqlite3.connect("postgres://avnadmin:AVNS_Ez0UFOgjgaSCk-Gr7NQ@sung-erenyeager.h.aivencloud.com:23096/defaultdb?sslmode=require")
 cursor = conn.cursor()
 
 def update_user_info(user_id, username, full_name):
