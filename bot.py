@@ -24,12 +24,12 @@ def init_db():
 
 # Command to save a link
 @app.on_message(filters.command("link") & filters.private)
-def save_link(client, message):
+async def save_link(client, message):
     user_id = message.from_user.id
-    link = message.text.split(" ", 1)[1] if len(message.command) > 1 else None
-
-    if link is None:
-        message.reply_text("Please provide a link. Usage: /link {link}")
+    if len(message.command) > 1:
+        link = message.command[1]
+    else:
+        await message.reply_text("Please provide a link. Usage: /link {link}")
         return
 
     conn = sqlite3.connect("links.db")
@@ -37,20 +37,6 @@ def save_link(client, message):
     cursor.execute("INSERT INTO links (user_id, link) VALUES (?, ?)", (user_id, link))
     conn.commit()
     conn.close()
-
-    message.reply_text(f"Link saved successfully!")
-
-# Command to retrieve all saved links
-@app.on_message(filters.command("links") & filters.private)
-def get_links(client, message):
-    user_id = message.from_user.id
-
-    conn = sqlite3.connect("links.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT link FROM links WHERE user_id = ?", (user_id,))
-    rows = cursor.fetchall()
-    conn.close()
-
     if rows:
         links = "\n".join([row[0] for row in rows])
         message.reply_text(f"Your saved links:\n{links}")
