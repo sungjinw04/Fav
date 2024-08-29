@@ -1,81 +1,70 @@
+import sqlite3
 from pyrogram import Client, filters
-from pymongo import MongoClient
-import os
-from datetime import datetime
+from pyrogram.types import Message
 
-# Replace with your API ID, API HASH and Bot Token from BotFather
-api_id = "25064357"
-api_hash = "cda9f1b3f9da4c0c93d1f5c23ccb19e2"
-bot_token = "7519139941:AAE6jFCGiqvhLu1i7HoNL9qdQRZgrQm6HqM"
+# Initialize Pyrogram client
+app = Client(
+    "my_bot",
+    api_id="25064357",  # Replace with your API ID
+    api_hash="cda9f1b3f9da4c0c93d1f5c23ccb19e2"",  # Replace with your API hash
+    bot_token="7519139941:AAE6jFCGiqvhLu1i7HoNL9qdQRZgrQm6HqM"  # Replace with your bot token
+)
 
-app = Client("my_bot", api_id=api_id, api_hash=api_hash, bot_token=bot_token)
+# Connect to SQLite database
+conn = sqlite3.connect("bot_database.db")
+cursor = conn.cursor()
 
-# MongoDB setup
-mongo_client = MongoClient("mongodb+srv://Sungjinwoo4:9f3FShxbKgJF1U1o@cluster0.nynyp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
-db = mongo_client.telegram_bot
-user_data = db.user_data
+def update_user_info(user_id, username, full_name):
+    cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+    user = cursor.fetchone()
 
-# Function to track and store user info
-def track_user(user):
-    user_doc = user_data.find_one({"user_id": user.id})
-    if user_doc:
-        # Check for changes
-        changes = []
-        if user.username != user_doc.get("username"):
-            changes.append({
-                "field": "username",
-                "old_value": user_doc.get("username"),
-                "new_value": user.username,
-                "timestamp": datetime.utcnow().isoformat()
-            })
-        if user.first_name + " " + (user.last_name or "") != user_doc.get("name"):
-            changes.append({
-                "field": "name",
-                "old_value": user_doc.get("name"),
-                "new_value": user.first_name + " " + (user.last_name or ""),
-                "timestamp": datetime.utcnow().isoformat()
-            })
-        if changes:
-            # Update document with changes
-            user_data.update_one({"user_id": user.id}, {"$set": {
-                "username": user.username,
-                "name": user.first_name + " " + (user.last_name or ""),
-                "changes": user_doc.get("changes", []) + changes
-            }})
-            # Notify group about the changes
-            for change in changes:
-                app.send_message(user.chat.id, f"{user_doc.get('name')} has changed their {change['field']} to {change['new_value']}.")
-    else:
-        # Add new user
-        user_data.insert_one({
-            "user_id": user.id,
-            "username": user.username,
-            "name": user.first_name + " " + (user.last_name or ""),
-            "changes": []
-        })
-
-# Handler to track new messages
-@app.on_message(filters.group)
-def capture_messages(client, message):
-    user = message.from_user
     if user:
-        track_user(user)
-
-# Command to fetch all changes made by a particular member
-@app.on_message(filters.command("balatkaar", prefixes="/") & filters.group)
-def fetch_user_changes(client, message):
-    user_id = message.command[1]  # Assuming the user_id is passed as an argument
-    user_doc = user_data.find_one({"user_id": int(user_id)})
-    if user_doc and "changes" in user_doc:
-        changes = user_doc["changes"]
-        if changes:
-            change_msgs = [f"{change['field'].capitalize()} changed from {change['old_value']} to {change['new_value']} at {change['timestamp']}" for change in changes]
-            client.send_message(message.chat.id, "\n".join(change_msgs))
-        else:
-            client.send_message(message.chat.id, "No changes recorded for this user.")
+        if user[1] != username:
+            cursor.execute("INSERT INTO username_changes (user_id, old_username, new_username) VALUES (?, ?, ?)",
+                           (user_id, user[1], username))
+            conn.commit()
+            return f"User @{user[1]} has changed their username to @{username}."
+        
+        if user[2] != full_name:
+            cursor.execute("INSERT INTO fullname_changes (user_id, old_fullname, new_fullname) VALUES (?, ?, ?)",
+                           (user_id, user[2], full_name))
+            conn.commit()
+            return f"User {user[2]} has changed their name to {full_name}."
+        
+        return None
     else:
-        client.send_message(message.chat.id, "User not found.")
+        cursor.execute("INSERT INTO users (user_id, username, full_name) VALUES (?, ?, ?)",
+                       (user_id, username, full_name))
+        conn.commit()
+        return None
 
-if __name__ == "__main__":
-    app.run()
+@app.on_message(filters.group)
+def capture_message(client, message: Message):
+    user_id = message.from_user.id
+    username = message.from_user.username or ""
+    full_name = message.from_user.first_name + " " + (message.from_user.last_name or "")
+    
+    notification = update_user_info(user_id, username, full_name)
+    if notification:
+        message.reply_text(notification)
+
+@app.on_message(filters.command("balatkaar") & filters.group)
+def fetch_changes(client, message: Message):
+    if len(message.command) > 1:
+        user_id = message.command[1]
+        cursor.execute("SELECT old_username, new_username, change_time FROM username_changes WHERE user_id = ?", (user_id,))
+        username_changes = cursor.fetchall()
+        
+        cursor.execute("SELECT old_fullname, new_fullname, change_time FROM fullname_changes WHERE user_id = ?", (user_id,))
+        fullname_changes = cursor.fetchall()
+        
+        response = "Username changes:\n" + "\n".join([f"{old} -> {new} at {time}" for old, new, time in username_changes])
+        response += "\n\nFullname changes:\n" + "\n".join([f"{old} -> {new} at {time}" for old, new, time in fullname_changes])
+        
+        message.reply_text(response)
+    else:
+        message.reply_text("Please provide a user ID.")
+
+# Run the bot
+app.run()
 
