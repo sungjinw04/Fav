@@ -4,7 +4,7 @@ from pyrogram import Client, filters
 # Initialize the bot with your credentials
 API_ID = "25064357"
 API_HASH = "cda9f1b3f9da4c0c93d1f5c23ccb19e2"
-BOT_TOKEN = "7498303276:AAEKU3YjvZZxUlXaoBDugiN8IsNsgWll_48"
+BOT_TOKEN = "7519139941:AAE6jFCGiqvhLu1i7HoNL9qdQRZgrQm6HqM"
 
 app = Client("link_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
