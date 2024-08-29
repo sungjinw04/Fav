@@ -2,7 +2,7 @@ import sqlite3
 from pyrogram import Client, filters
 
 # Initialize the bot with your credentials
-API_ID = "25064357"
+API_ID = "25064357
 API_HASH = "cda9f1b3f9da4c0c93d1f5c23ccb19e2"
 BOT_TOKEN = "7519139941:AAE6jFCGiqvhLu1i7HoNL9qdQRZgrQm6HqM"
 
