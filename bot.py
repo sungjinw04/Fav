@@ -1,70 +1,64 @@
 import sqlite3
 from pyrogram import Client, filters
-from pyrogram.types import Message
 
-# Initialize Pyrogram client
-app = Client(
-    "my_bot",
-    api_id="25064357",  # Replace with your API ID
-    api_hash="cda9f1b3f9da4c0c93d1f5c23ccb19e2",  # Replace with your API hash
-    bot_token="7519139941:AAE6jFCGiqvhLu1i7HoNL9qdQRZgrQm6HqM"  # Replace with your bot token
-)
+# Initialize the bot with your credentials
+API_ID = "25064357"
+API_HASH = "cda9f1b3f9da4c0c93d1f5c23ccb19e2"
+BOT_TOKEN = "7498303276:AAEKU3YjvZZxUlXaoBDugiN8IsNsgWll_48"
 
-# Connect to SQLite database
-conn = sqlite3.connect("postgres://avnadmin:AVNS_Ez0UFOgjgaSCk-Gr7NQ@sung-erenyeager.h.aivencloud.com:23096/defaultdb?sslmode=require")
-cursor = conn.cursor()
+app = Client("link_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-def update_user_info(user_id, username, full_name):
-    cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
-    user = cursor.fetchone()
+# Initialize the SQLite database
+def init_db():
+    conn = sqlite3.connect("links.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            link TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
 
-    if user:
-        if user[1] != username:
-            cursor.execute("INSERT INTO username_changes (user_id, old_username, new_username) VALUES (?, ?, ?)",
-                           (user_id, user[1], username))
-            conn.commit()
-            return f"User @{user[1]} has changed their username to @{username}."
-        
-        if user[2] != full_name:
-            cursor.execute("INSERT INTO fullname_changes (user_id, old_fullname, new_fullname) VALUES (?, ?, ?)",
-                           (user_id, user[2], full_name))
-            conn.commit()
-            return f"User {user[2]} has changed their name to {full_name}."
-        
-        return None
-    else:
-        cursor.execute("INSERT INTO users (user_id, username, full_name) VALUES (?, ?, ?)",
-                       (user_id, username, full_name))
-        conn.commit()
-        return None
-
-@app.on_message(filters.group)
-def capture_message(client, message: Message):
+# Command to save a link
+@app.on_message(filters.command("link") & filters.private)
+def save_link(client, message):
     user_id = message.from_user.id
-    username = message.from_user.username or ""
-    full_name = message.from_user.first_name + " " + (message.from_user.last_name or "")
-    
-    notification = update_user_info(user_id, username, full_name)
-    if notification:
-        message.reply_text(notification)
+    link = message.text.split(" ", 1)[1] if len(message.command) > 1 else None
 
-@app.on_message(filters.command("balatkaar") & filters.group)
-def fetch_changes(client, message: Message):
-    if len(message.command) > 1:
-        user_id = message.command[1]
-        cursor.execute("SELECT old_username, new_username, change_time FROM username_changes WHERE user_id = ?", (user_id,))
-        username_changes = cursor.fetchall()
-        
-        cursor.execute("SELECT old_fullname, new_fullname, change_time FROM fullname_changes WHERE user_id = ?", (user_id,))
-        fullname_changes = cursor.fetchall()
-        
-        response = "Username changes:\n" + "\n".join([f"{old} -> {new} at {time}" for old, new, time in username_changes])
-        response += "\n\nFullname changes:\n" + "\n".join([f"{old} -> {new} at {time}" for old, new, time in fullname_changes])
-        
-        message.reply_text(response)
+    if link is None:
+        message.reply_text("Please provide a link. Usage: /link {link}")
+        return
+
+    conn = sqlite3.connect("links.db")
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO links (user_id, link) VALUES (?, ?)", (user_id, link))
+    conn.commit()
+    conn.close()
+
+    message.reply_text(f"Link saved successfully!")
+
+# Command to retrieve all saved links
+@app.on_message(filters.command("links") & filters.private)
+def get_links(client, message):
+    user_id = message.from_user.id
+
+    conn = sqlite3.connect("links.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT link FROM links WHERE user_id = ?", (user_id,))
+    rows = cursor.fetchall()
+    conn.close()
+
+    if rows:
+        links = "\n".join([row[0] for row in rows])
+        message.reply_text(f"Your saved links:\n{links}")
     else:
-        message.reply_text("Please provide a user ID.")
+        message.reply_text("You haven't saved any links yet.")
 
-# Run the bot
-app.run()
+# Initialize the database when the bot starts
+if __name__ == "__main__":
+    init_db()
+    app.run()
 
